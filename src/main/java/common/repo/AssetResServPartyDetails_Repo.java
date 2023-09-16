@@ -13,6 +13,9 @@ public interface AssetResServPartyDetails_Repo extends JpaRepository<AssetResSer
 	@Query(value = "SELECT party_seq_no FROM ASSET_ResServ_Party_DETAILS a WHERE (RESSRVPRD_SEQ_NO = :id and rownum=1)", nativeQuery = true)
 	Long getPartyForResProd(@Param("id") Long id);
 	
+	@Query(value = "SELECT service_seq_no FROM ASSET_ResServ_Party_DETAILS a WHERE (RESSRVPRD_SEQ_NO = :id and rownum=1)", nativeQuery = true)
+	Long getServiceForResProd(@Param("id") Long id);
+	
 	@Query(value = "SELECT * FROM ASSET_ResServ_Party_DETAILS a WHERE party_seq_no in :ids  order by RESSRVPRD_SEQ_NO", nativeQuery = true)
 	CopyOnWriteArrayList<AssetResServPartyDetail> getDetailsForParties(@Param("ids") CopyOnWriteArrayList<Long> ids);
 	

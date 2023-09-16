@@ -4,193 +4,88 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import common.repo.AssetMainSchdMaster_Repo;
-import common.repo.AssetMaintenanceMaster_Repo;
+import org.springframework.util.concurrent.ListenableFuture;
+import org.springframework.util.concurrent.ListenableFutureCallback;
+import common.repo.AssetMaintenanceSchdDetailsCUD_Repo;
 import common.repo.AssetMaintenanceSchdDetailsRead_Repo;
 import common.repo.AssetMaster_Repo;
 import common.repo.AssetResServPartyDetails_Repo;
 import common.master.*;
-import common.dto.*;
 
-@Service("assetMaintenanceSchdBatchServ")
-//@Transactional(propagation = Propagation.REQUIRED, isolation = Isolation.READ_COMMITTED)
-public class AssetMainSchdDoService_Service	implements I_AssetMainSchdDoService_Service
-		{
-	private static final Logger logger = LoggerFactory
-			.getLogger(AssetMainSchdDoService_Service.class);
-
-	@Autowired
-	private AssetResServPartyDetails_Repo assetResServPartyDetailsRepo;
-
-	@Autowired
-	private AssetMainSchdMaster_Repo assetMainSchdMasterRepo;
-
-	@Autowired
-	private AssetMaintenanceMaster_Repo assetMaintenanceMasterRepo;
+@Service("assetMaintenanceSchdDoServiceServ")
+public class AssetMainSchdDoService_Service implements I_AssetMainSchdDoService_Service {
+	private static final Logger logger = LoggerFactory.getLogger(AssetMainSchdDoService_Service.class);
 
 	@Autowired
 	private AssetMaintenanceSchdDetailsRead_Repo assetMainSchdDetailsReadRepo;
 
 	@Autowired
+	private AssetMaintenanceSchdDetailsCUD_Repo assetMainSchdDetailsCUDRepo;
+
+	@Autowired
+	private AssetResServPartyDetails_Repo assetResServPartyDetailsRepo;
+
+	@Autowired
 	private AssetMaster_Repo assetMasterRepo;
 
-	//@Scheduled(fixedRate = 3000)
-	//@Transactional(propagation = Propagation.REQUIRED, isolation = Isolation.READ_COMMITTED)
+	@Value("${topic.name.request}")
+	private String topicmyRequest;
+
+	@Value("${topic.name.requestresponse}")
+	private String myRequestResponse;
+
+	@Autowired
+	private KafkaTemplate<String, ServiceRequestMaster> kafkaTemplateRequest;
+
+	@Scheduled(fixedRate = 3000)
 	public void runBatch() {
-			// For Each Asset - Get All Res Prod Servs
-			CopyOnWriteArrayList<AssetMaster> assetMasters = assetMasterRepo.getAllAssets();
+		// For Each Asset - Get All Res Prod Servs
+		CopyOnWriteArrayList<AssetMaintenanceSchdDetail> assetMaintenanceSchdDetails = assetMainSchdDetailsReadRepo
+				.getAssetsNotWIP();
 
-			logger.info("Assets Size : " + assetMasters.size());
+		logger.info("Assets Size : " + assetMaintenanceSchdDetails.size());
+		AssetMaintenanceSchdDetail assetMaintenanceSchdDetail = null;
 
-			if (assetMasters != null && assetMasters.size() > 0) {
-				Long resSeqNo = (long) 0;
-				Long assSeqNo = (long) 0;
-				CopyOnWriteArrayList<AssetMainSchdMaster_DTO> globalAssetMainSchdMaster_DTOs = new CopyOnWriteArrayList<AssetMainSchdMaster_DTO>();
-				AssetMainSchdMaster_DTO assetMainSchdMaster_DTO = null;
-				CopyOnWriteArrayList<AssetMaintenanceMaster> assetMaintenanceMasters = null;
-				CopyOnWriteArrayList<AssetMaintenanceSchdDetail> assetMaintenanceSchdDetails = null;
-				CopyOnWriteArrayList<AssetMainSchdMaster_DTO> assetMainSchdMaster_DTOs = null;
+		if (assetMaintenanceSchdDetails != null && assetMaintenanceSchdDetails.size() > 0) {
+			for (int i = 0; i < assetMaintenanceSchdDetails.size(); i++) {
+				assetMaintenanceSchdDetail = assetMaintenanceSchdDetails.get(i);
 
-				// For each Asset
-				for (int i = 0; i < assetMasters.size(); i++) 
-				{
-					resSeqNo = assetMasters.get(i).getResourceSeqNo();
-					assSeqNo = assetMasters.get(i).getAssetSeqNo();
-					assetMainSchdMaster_DTOs = new CopyOnWriteArrayList<AssetMainSchdMaster_DTO>();
-					assetMaintenanceMasters = assetMaintenanceMasterRepo.getAssetsByAsset(assSeqNo);
-
-					// For each Asset - For each maintenance record
-					for (int j = 0; j < assetMaintenanceMasters.size(); j++) 
-					{
-						// For a maintenance record - add Each Rule in schedule masters buffer
-						assetMaintenanceSchdDetails = assetMainSchdDetailsReadRepo.getSelectSchedulesByMaintenance(assetMaintenanceMasters.get(j).getAssetMaintenanceSeqNo());
-						if (assetMaintenanceSchdDetails != null && assetMaintenanceSchdDetails.size() > 0) 
-						{
-							for (int k = 0; k < assetMaintenanceSchdDetails.size(); k++) 
-							{
-								if (!this.checkRuleForProdServInSchedules(assetMainSchdMaster_DTOs, assSeqNo, assetMaintenanceSchdDetails.get(k).getRessrvprdSeqNo(), assetMaintenanceSchdDetails.get(k).getRuleSeqNo())) 
-								{
-									assetMainSchdMaster_DTO = new AssetMainSchdMaster_DTO();
-									assetMainSchdMaster_DTO.setAsetSeqNo(assSeqNo);
-									assetMainSchdMaster_DTO.setRessrvprdSeqNo(assetMaintenanceSchdDetails.get(k).getRessrvprdSeqNo());
-									assetMainSchdMaster_DTO.setRuleSeqNo(assetMaintenanceSchdDetails.get(k).getRuleSeqNo());
-									assetMainSchdMaster_DTOs.add(assetMainSchdMaster_DTO);
-									logger.info("Local Asset in loop : " + assSeqNo + "  Maintenance Schd Size : "	+ assetMainSchdMaster_DTOs.size());
-								}
-							}
-						}
-					}
-					assetMainSchdMaster_DTOs = this.checkScheduledForProdServ(assetMainSchdMaster_DTOs, resSeqNo);
-					globalAssetMainSchdMaster_DTOs = this.addToGlobalList(assetMainSchdMaster_DTOs,
-							globalAssetMainSchdMaster_DTOs);
-					logger.info("Local Asset : " + assSeqNo + "  Maintenance Schd Size : "
-							+ assetMainSchdMaster_DTOs.size());
-					logger.info("Global Asset : " + assSeqNo + "  Maintenance Schd Size : "
-							+ globalAssetMainSchdMaster_DTOs.size());
-				}
-				this.processBatch(globalAssetMainSchdMaster_DTOs);
-			}
-		return ;
-	}
-
-	public synchronized boolean checkRuleForProdServInSchedules(CopyOnWriteArrayList<AssetMainSchdMaster_DTO> aDetails,
-			Long aSeqNo, Long resPrdSeqNo, Long ruleSeqNo) {
-		boolean found = false;
-		logger.info("Checking Rules in SSchedules");
-		for (int a = 0; a < aDetails.size(); a++) {
-			if (aDetails.get(a).getAsetSeqNo() == aSeqNo && aDetails.get(a).getRessrvprdSeqNo() == resPrdSeqNo
-					&& aDetails.get(a).getRuleSeqNo() == ruleSeqNo) {
-				found = true;
-				logger.info("Found in Schedule Asset : " + aSeqNo + "  ProdServ : " + resPrdSeqNo + "  Rule : "
-						+ ruleSeqNo);
-			} else {
-				logger.info("Not Found in Schedule Asset : " + aSeqNo + "  ProdServ : " + resPrdSeqNo + "  Rule : "
-						+ ruleSeqNo);
+				sendToServiceManager(assetMaintenanceSchdDetail);
 			}
 		}
-		return found;
+		return;
 	}
 
-	public synchronized CopyOnWriteArrayList<AssetMainSchdMaster_DTO> checkScheduledForProdServ(
-			CopyOnWriteArrayList<AssetMainSchdMaster_DTO> aDetails, Long resSeqNo) {
+	public synchronized void sendToServiceManager(AssetMaintenanceSchdDetail assetMaintenanceSchdDetail) {
+		ServiceRequestMaster serviceRequestMaster = new ServiceRequestMaster();
+		Long ownerSeqNo = assetMasterRepo.getPartyForAsset(assetMaintenanceSchdDetail.getAssetSeqNo());
+		Long partySeqNo = assetResServPartyDetailsRepo
+				.getPartyForResProd(assetMaintenanceSchdDetail.getRessrvprdSeqNo());
+		serviceRequestMaster.setFrPartySeqNo(ownerSeqNo);
+		serviceRequestMaster.setReferenceSeqNo(assetMaintenanceSchdDetail.getRuleLineSeqNo());
+		serviceRequestMaster.setToPartySeqNo(partySeqNo);
 
-		CopyOnWriteArrayList<AssetResServPartyDetail> assetResServPartyDetails = assetResServPartyDetailsRepo
-				.getDetailsForResource(resSeqNo);
-		logger.info("Checking Scheduled For ProdServ List Size : " + assetResServPartyDetails.size());
+		ListenableFuture<SendResult<String, ServiceRequestMaster>> future = kafkaTemplateRequest.send(topicmyRequest,
+				serviceRequestMaster);
+		future.addCallback(new ListenableFutureCallback<SendResult<String, ServiceRequestMaster>>() {
 
-		CopyOnWriteArrayList<Long> resProdSeqNos = new CopyOnWriteArrayList<Long>();
-
-		for (int d = 0; d < assetResServPartyDetails.size(); d++) 
-		{
-		resProdSeqNos.add(assetResServPartyDetails.get(d).getRessrvprdSeqNo());
-		}
-
-		CopyOnWriteArrayList<AssetMainSchdMaster> assetPrdSrvMasters = assetMainSchdMasterRepo
-				.getSelectResProdServsByResProdServs(resProdSeqNos);
-		
-		logger.info("Checking Scheduled For ProdServ Rules Size : " + assetPrdSrvMasters.size());
-
-		for (int b = 0; b < assetPrdSrvMasters.size(); b++) {
-			for (int a = 0; a < aDetails.size(); a++) {
-				if (assetPrdSrvMasters.get(b).getId().getRessrvprdSeqNo() == aDetails.get(a).getRessrvprdSeqNo()
-						&& assetPrdSrvMasters.get(b).getId().getRuleSeqNo() == aDetails.get(a).getRuleSeqNo()) {
-					aDetails.get(a).setScheduledFlag(true);
-				} else {
-					logger.info("Not yet Scheduled Asset : " + aDetails.get(b).getAsetSeqNo() + "  ProdServ : "
-							+ aDetails.get(b).getRessrvprdSeqNo() + "  Rule : " + aDetails.get(b).getRuleSeqNo());
-				}
-
+			@Override
+			public void onSuccess(final SendResult<String, ServiceRequestMaster> message) 
+			{
+				logger.info("sent message= " + message + " with offset= " + message.getRecordMetadata().offset());
+				assetMainSchdDetailsCUDRepo.setAssetWIP(message.getProducerRecord().value().getReferenceSeqNo());
 			}
-		}
-		return aDetails;
-	}
 
-	public synchronized CopyOnWriteArrayList<AssetMainSchdMaster_DTO> addToGlobalList(
-			CopyOnWriteArrayList<AssetMainSchdMaster_DTO> lDetails,
-			CopyOnWriteArrayList<AssetMainSchdMaster_DTO> gDetails) {
-
-		for (int c = 0; c < lDetails.size(); c++) {
-
-			if (!lDetails.get(c).getScheduledFlag()) {
-				gDetails.add(lDetails.get(c));
+			@Override
+			public void onFailure(final Throwable throwable) {
+				logger.error("unable to send message= ", throwable);
 			}
-		}
-		return gDetails;
-	}
-
-	public synchronized void processBatch(CopyOnWriteArrayList<AssetMainSchdMaster_DTO> gDetails) {
-	}
-
-	public synchronized void someWork(CopyOnWriteArrayList<AssetMainSchdMaster_DTO> gDetails) {
-
-		/*
-		 * Timestamp currDate = null; Long datetime = null; Integer runSeqNo = 0;
-		 * Timestamp sysDtTm = null; Integer nextRunNo = 0; Timestamp lastDtTm = null;
-		 * AssetMainSchdDetailsPK assetMainSchdDetailsPK = null; AssetMainSchdDetails
-		 * assetMainSchdDetails = null;
-		 * 
-		 * if (assetSchdMasters != null) { for (int i = 0; i < assetSchdMasters.size();
-		 * i++) { if
-		 * (!assetSchdMasters.get(i).getLastRunNo().equals(assetSchdMasters.get(i).
-		 * getNoOfOccurences())) { lastDtTm = assetSchdMasters.get(i).getLastRunDttm();
-		 * runSeqNo = assetSchdMasters.get(i).getLastRunNo(); currDate =
-		 * DateUtil.addDays(lastDtTm, assetSchdMasters.get(i).getLapseDays(), 0, 0, 0);
-		 * datetime = System.currentTimeMillis(); sysDtTm = new Timestamp(datetime); if
-		 * (sysDtTm.getTime() > currDate.getTime()) { assetMainSchdDetailsPK = new
-		 * AssetMainSchdDetailsPK(); assetMainSchdDetails = new AssetMainSchdDetails();
-		 * nextRunNo = assetMainSchdDetailsRepo
-		 * .getLastRunNoForSchd(assetSchdMasters.get(i).getLastRunNo());
-		 * assetMainSchdDetailsPK.setRunNo(nextRunNo + 1); assetMainSchdDetailsPK
-		 * .setAssetMaintenanceSeqNo(assetSchdMasters.get(i).getId().
-		 * getAssetMaintenanceSeqNo());
-		 * assetMainSchdDetails.setId(assetMainSchdDetailsPK);
-		 * assetMainSchdDetails.setRunDate(sysDtTm);
-		 * assetMainSchdDetails.setIsProcessed('Y'); assetMainSchdDetails.setRemark("");
-		 * assetMainSchdDetails.setStatus("");
-		 * assetMainSchdMasterRepo.updateLastDtTm(runSeqNo, currDate); } }
-		 * 
-		 * } }
-		 */
+		});
+		return;
 	}
 }

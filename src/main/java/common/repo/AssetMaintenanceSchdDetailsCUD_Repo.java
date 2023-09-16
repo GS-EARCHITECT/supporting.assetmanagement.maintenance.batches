@@ -31,6 +31,10 @@ public interface AssetMaintenanceSchdDetailsCUD_Repo extends JpaRepository<Asset
 	@Modifying
 	@Query(value = "delete FROM ASSET_MAINTENANCE_SCHD_DETAILS where upper(trim(okflag))='Y'",nativeQuery = true) 
 	void delAssetsOK();
+	
+	@Modifying
+	@Query(value = "update ASSET_MAINTENANCE_SCHD_DETAILS set wipflag = 'Y' where schedule_seq_no= :id",nativeQuery = true) 
+	void setAssetWIP(@Param("id") Long id);
 
 	@Modifying
 	@Query(value = "delete FROM ASSET_MAINTENANCE_SCHD_DETAILS where upper(trim(doneflag))='Y'",nativeQuery = true) 
@@ -55,6 +59,8 @@ public interface AssetMaintenanceSchdDetailsCUD_Repo extends JpaRepository<Asset
 	@Modifying
 	@Query(value = "delete FROM ASSET_MAINTENANCE_SCHD_DETAILS where ((:fr BETWEEN FR_DTTM and TO_DTTM) and (:to BETWEEN FR_DTTM and TO_DTTM))",nativeQuery = true) 
 	void delAssetsBetweenDTTM(@Param(value = "fr") Timestamp fr, @Param(value = "to") Timestamp to);
+	
+	
 	
 } 
 

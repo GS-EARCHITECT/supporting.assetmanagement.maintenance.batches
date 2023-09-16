@@ -11,10 +11,10 @@
 	</parent>
 
 	<groupId>myABC</groupId>
-	<artifactId>supporting.asset_Management</artifactId>
+	<artifactId>supporting.assetmanagement.maintenance.batches</artifactId>
 	<packaging>war</packaging>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>supporting.asset_Management</name>
+	<name>supporting.assetmanagement.maintenance.batches</name>
 	<url>http://maven.apache.org</url>
 
 	<properties>
@@ -45,7 +45,17 @@
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpclient</artifactId>
 		</dependency>
+		
+				<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka</artifactId>
+		</dependency>
 
+		<dependency>
+			<groupId>org.apache.kafka</groupId>
+			<artifactId>kafka-streams</artifactId>
+		</dependency>
+		
 		<dependency>
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>
@@ -75,6 +85,6 @@
 			</plugin>
 		</plugins>
 
-		<finalName>supporting.asset_Management</finalName>
+		<finalName>supporting.assetmanagement.maintenance.batches</finalName>
 	</build>
 </project>

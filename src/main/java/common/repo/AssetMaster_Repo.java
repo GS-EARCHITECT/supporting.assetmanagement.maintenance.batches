@@ -16,4 +16,7 @@ public interface AssetMaster_Repo extends JpaRepository<AssetMaster, Long>
 	@Query(value = "SELECT * FROM ASSET_MASTER a WHERE a.resource_seq_no in :ids order by asset_seq_no", nativeQuery = true)
 	CopyOnWriteArrayList<AssetMaster> getSelectAssetsByResources(@Param("ids") CopyOnWriteArrayList<Long> ids);
 	
+	@Query(value = "SELECT party_seq_no FROM ASSET_MASTER a WHERE a.asset_seq_no = :id", nativeQuery = true)
+	Long getPartyForAsset(@Param("id") Long id);
+	
 }
